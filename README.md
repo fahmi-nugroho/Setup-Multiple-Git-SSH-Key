@@ -1,265 +1,420 @@
-# 🔐 Complete SSH Setup Guide for Multi Git Accounts (Linux)
+# Multiple Git User SSH Setup (Linux)
 
-Panduan lengkap untuk setup SSH key di Linux untuk banyak akun (GitHub / GitLab), termasuk best practice dan troubleshooting.
+Dokumentasi setup multiple akun Git menggunakan SSH di Linux.
 
----
+Contoh:
+- Akun personal → GitHub
+- Akun kerja → GitLab
 
-## 📌 Tujuan
-
-* Menggunakan banyak akun Git tanpa konflik
-* Menghindari error SSH & permission
-* Workflow development yang clean & aman
-
----
-
-## 🧠 Konsep Dasar
-
-* SSH key digunakan untuk autentikasi ke Git server
-* 1 akun Git = 1 SSH key (**best practice**)
-* SSH key ≠ email Git (email hanya untuk commit identity)
+Setup ini memungkinkan:
+- SSH key terpisah
+- Identity commit berbeda
+- Aman untuk multi project/client
+- Tidak perlu logout/login akun Git
 
 ---
 
-## 🔑 1. Generate SSH Key
+# Struktur Final
 
-Buat key untuk setiap akun:
-
-```bash
-ssh-keygen -t ed25519 -C "personal" -f ~/.ssh/id_ed25519_github_personal
-ssh-keygen -t ed25519 -C "work" -f ~/.ssh/id_ed25519_github_work
-ssh-keygen -t ed25519 -C "gitlab" -f ~/.ssh/id_ed25519_gitlab
-```
-
-**Best Practice:**
-
-* Gunakan `ed25519`
-* Selalu pakai passphrase
-
----
-
-## 📤 2. Tambahkan Public Key ke Git
-
-```bash
-cat ~/.ssh/id_ed25519_github_personal.pub
-```
-
-Tambahkan ke:
-
-* GitHub → Settings → SSH Keys
-* GitLab → Preferences → SSH Keys
-
----
-
-## ⚙️ 3. Konfigurasi SSH (`~/.ssh/config`)
-
-```bash
-Host github-personal
-    HostName github.com
-    User git
-    IdentityFile ~/.ssh/id_ed25519_github_personal
-    IdentitiesOnly yes
-
-Host github-work
-    HostName github.com
-    User git
-    IdentityFile ~/.ssh/id_ed25519_github_work
-    IdentitiesOnly yes
-
-Host gitlab
-    HostName gitlab.com
-    User git
-    IdentityFile ~/.ssh/id_ed25519_gitlab
-    IdentitiesOnly yes
-```
-
----
-
-## 🔑 4. Jalankan SSH Agent
-
-```bash
-eval "$(ssh-agent -s)"
-```
-
-Tambah key:
-
-```bash
-ssh-add ~/.ssh/id_ed25519_github_personal
-ssh-add ~/.ssh/id_ed25519_github_work
-ssh-add ~/.ssh/id_ed25519_gitlab
-```
-
----
-
-## ⚡ 5. Auto Load SSH Key
-
-Tambahkan ke `.zshrc` / `.bashrc`:
-
-```bash
-if [ -z "$SSH_AUTH_SOCK" ]; then
-    eval "$(ssh-agent -s)"
-fi
-
-if ! ssh-add -l >/dev/null 2>&1; then
-    ssh-add ~/.ssh/id_ed25519_github_personal
-    ssh-add ~/.ssh/id_ed25519_github_work
-    ssh-add ~/.ssh/id_ed25519_gitlab
-fi
-```
-
----
-
-## 🔗 6. Clone Repository
-
-Gunakan alias:
-
-```bash
-git clone git@github-work:company/repo.git
-git clone git@github-personal:user/repo.git
-```
-
----
-
-## 🧪 7. Test Koneksi
-
-```bash
-ssh -T github-work
-```
-
----
-
-## 👤 8. Set Git Identity
-
-```bash
-git config user.name "Your Name"
-git config user.email "your@email.com"
-```
-
----
-
-## 📁 9. Struktur Folder (Opsional)
-
-```
-~/projects/work/
-~/projects/personal/
-```
-
-Auto config:
-
-```bash
-[includeIf "gitdir:~/projects/work/"]
-    path = ~/.gitconfig-work
-```
-
----
-
-## 🔐 10. Permission
-
-```bash
-chmod 700 ~/.ssh
-chmod 600 ~/.ssh/*
-```
-
----
-
-## 🚫 Hal yang Harus Dihindari
-
-```bash
-sudo git clone
-sudo git pull
-```
-
----
-
-## ⚠️ Troubleshooting
-
-### ❌ Permission denied (publickey)
-
-* Key belum ditambahkan ke Git
-* SSH config salah
-* Key belum di-load (`ssh-add -l`)
-
----
-
-### ❌ Could not open a connection to your authentication agent
-
-```bash
-eval "$(ssh-agent -s)"
-```
-
----
-
-### ❌ No such identity
-
-Pastikan file key ada:
-
-```bash
-ls ~/.ssh
-```
-
----
-
-### ❌ Dubious ownership
-
-Fix:
-
-```bash
-sudo chown -R $USER:$USER ~/projects
-```
-
----
-
-### ❌ SSH pakai `/root/.ssh`
-
-Penyebab:
-
-* pakai `sudo`
-
-Solusi:
-
-* jangan gunakan `sudo` untuk Git
-
----
-
-## 🧹 Struktur Ideal `.ssh`
-
-```
+```text
 ~/.ssh/
 ├── config
-├── id_ed25519_github_personal
-├── id_ed25519_github_work
-├── id_ed25519_gitlab
+├── id_ed25519_personal
+├── id_ed25519_personal.pub
+├── id_ed25519_gitlab_work
+└── id_ed25519_gitlab_work.pub
 ```
 
 ---
 
-## 🧪 Debug Tools
+# 1. Generate SSH Key
+
+## Personal GitHub
+
+Generate SSH key:
+
+```bash
+ssh-keygen -t ed25519 -C "personal@email.com"
+```
+
+Saat muncul prompt:
+
+```text
+Enter file in which to save the key (/home/fahmi/.ssh/id_ed25519):
+```
+
+Isi dengan:
+
+```bash
+~/.ssh/id_ed25519_personal
+```
+
+---
+
+## Work GitLab
+
+Generate SSH key:
+
+```bash
+ssh-keygen -t ed25519 -C "work@company.com"
+```
+
+Saat muncul prompt:
+
+```text
+Enter file in which to save the key
+```
+
+Isi dengan:
+
+```bash
+~/.ssh/id_ed25519_gitlab_work
+```
+
+---
+
+# 2. Jalankan SSH Agent
+
+```bash
+eval "$(ssh-agent -s)"
+```
+
+---
+
+# 3. Tambahkan SSH Key ke Agent
+
+## Tambahkan personal key
+
+```bash
+ssh-add ~/.ssh/id_ed25519_personal
+```
+
+## Tambahkan work key
+
+```bash
+ssh-add ~/.ssh/id_ed25519_gitlab_work
+```
+
+## Verifikasi key
 
 ```bash
 ssh-add -l
-ssh -T github-work
-ssh -vT git@github.com
 ```
 
 ---
 
-## 🎯 Best Practice Ringkasan
+# 4. Upload Public Key ke Git Provider
 
-* 1 akun = 1 key
-* Gunakan SSH config
-* Gunakan host alias
-* Jangan gunakan sudo
-* Gunakan passphrase
-* Pisahkan work & personal
+## Copy public key personal
+
+```bash
+cat ~/.ssh/id_ed25519_personal.pub
+```
+
+Copy hasilnya lalu tambahkan ke:
+
+https://github.com/settings/keys
+
+---
+
+## Copy public key work
+
+```bash
+cat ~/.ssh/id_ed25519_gitlab_work.pub
+```
+
+Copy hasilnya lalu tambahkan ke:
+
+https://gitlab.com/-/user_settings/ssh_keys
 
 ---
 
-## 🚀 Hasil Akhir
+# 5. Setup SSH Config
 
-Dengan setup ini:
+Buka file config:
 
-* Multi akun berjalan lancar
-* Tidak ada konflik SSH
-* Tidak ada error permission
-* Workflow lebih profesional & scalable
+```bash
+nano ~/.ssh/config
+```
+
+Isi file:
+
+```ssh
+# Personal Github
+Host github-personal
+    HostName github.com
+    User git
+    IdentityFile ~/.ssh/id_ed25519_personal
+    IdentitiesOnly yes
+
+# Work GitLab
+Host gitlab-work
+    HostName gitlab.com
+    User git
+    IdentityFile ~/.ssh/id_ed25519_gitlab_work
+    IdentitiesOnly yes
+```
+
+Simpan file:
+- CTRL + O
+- Enter
+- CTRL + X
+
+Set permission:
+
+```bash
+chmod 600 ~/.ssh/config
+```
 
 ---
+
+# 6. Test SSH Connection
+
+## Test GitHub
+
+```bash
+ssh -T git@github-personal
+```
+
+Jika berhasil:
+
+```text
+Hi username! You've successfully authenticated...
+```
+
+---
+
+## Test GitLab
+
+```bash
+ssh -T git@gitlab-work
+```
+
+Jika berhasil:
+
+```text
+Welcome to GitLab, @username!
+```
+
+---
+
+# 7. Clone Repository Menggunakan Alias
+
+## GitHub Personal
+
+Original URL:
+
+```text
+git@github.com:fahmi/frontend.git
+```
+
+Clone menggunakan alias:
+
+```bash
+git clone git@github-personal:fahmi/frontend.git
+```
+
+---
+
+## GitLab Work
+
+Original URL:
+
+```text
+git@gitlab.com:company/backend.git
+```
+
+Clone menggunakan alias:
+
+```bash
+git clone git@gitlab-work:company/backend.git
+```
+
+---
+
+# 8. Set Git Identity Per Repository
+
+Masuk ke repository:
+
+```bash
+cd repository
+```
+
+---
+
+## Untuk repository personal
+
+```bash
+git config user.name "Nama Personal"
+git config user.email "personal@email.com"
+```
+
+---
+
+## Untuk repository kerja
+
+```bash
+git config user.name "Nama Kerja"
+git config user.email "work@company.com"
+```
+
+---
+
+# 9. Verifikasi Config
+
+## Cek git config
+
+```bash
+git config --list
+```
+
+---
+
+## Cek remote repository
+
+```bash
+git remote -v
+```
+
+Harus menggunakan alias seperti:
+
+```text
+git@github-personal:...
+```
+
+atau
+
+```text
+git@gitlab-work:...
+```
+
+---
+
+# 10. Best Practice
+
+## Jangan gunakan sudo
+
+Gunakan user biasa.
+
+Benar:
+
+```text
+/home/fahmi/.ssh/
+```
+
+Salah:
+
+```text
+/root/.ssh/
+```
+
+---
+
+## Jangan gunakan global email untuk multi akun
+
+Hindari:
+
+```bash
+git config --global user.email ...
+```
+
+Lebih aman set per repository.
+
+---
+
+## Gunakan nama key yang jelas
+
+Contoh:
+
+```text
+id_ed25519_personal
+id_ed25519_gitlab_work
+id_ed25519_company_a
+id_ed25519_client_b
+```
+
+---
+
+# Troubleshooting
+
+## Permission denied (publickey)
+
+Cek key yang aktif:
+
+```bash
+ssh-add -l
+```
+
+Jika kosong:
+
+```bash
+ssh-add ~/.ssh/id_ed25519_personal
+```
+
+atau:
+
+```bash
+ssh-add ~/.ssh/id_ed25519_gitlab_work
+```
+
+---
+
+## SSH config tidak terbaca
+
+Cek permission:
+
+```bash
+chmod 600 ~/.ssh/config
+```
+
+---
+
+## Clone masih memakai akun salah
+
+Biasanya karena clone masih menggunakan:
+
+```text
+github.com
+```
+
+atau:
+
+```text
+gitlab.com
+```
+
+Harus menggunakan alias:
+
+```text
+github-personal
+gitlab-work
+```
+
+---
+
+# Contoh Final Workflow
+
+## Clone personal repo
+
+```bash
+git clone git@github-personal:fahmi/my-app.git
+```
+
+---
+
+## Clone work repo
+
+```bash
+git clone git@gitlab-work:company/backend.git
+```
+
+---
+
+# Kesimpulan
+
+Setup ini memberikan:
+- SSH key terpisah
+- Identitas commit terpisah
+- Aman untuk multi akun
+- Mudah scalable untuk banyak client/perusahaan
+- Tidak perlu logout/login akun Git lagi
